@@ -42,4 +42,16 @@ hooks 版より強力な制御を狙っているが、Claude Code のバージ�
 ## .claude/hooks/dlp
 
 `Read` / `Grep` が機密情報を含むファイルを読もうとしたときにブロックし、マスク済みコピーへ誘導する hook。
-詳細は [`.claude/hooks/dlp/README_ja.md`](.claude/hooks/dlp/README_ja.md) を参照。
+
+```mermaid
+flowchart LR
+    A["Claude Code:<br/>Read / Grep 呼び出し"] --> B{"dlp hook:<br/>機密情報を検知？"}
+    B -- いいえ --> C["allow:<br/>元ファイルのまま"]
+    B -- はい --> D["マスク済みコピーを生成<br/>(検知箇所を ******** に置換)"]
+    D --> E["元ファイルの読み取りを deny;<br/>Claude をマスク済み<br/>コピーへ誘導"]
+```
+
+（**上図には出ていないが、スキャナ自体が失敗・タイムアウトしたり設定が壊れている場合、この hook は
+fail-closed で既定 deny となり、allow 側にフォールバックすることはない** 。 ）判定の詳細（スコープ判定・
+鮮度チェック・fail-closed の挙動）や設定は
+[`.claude/hooks/dlp/README_ja.md`](.claude/hooks/dlp/README_ja.md) を参照。

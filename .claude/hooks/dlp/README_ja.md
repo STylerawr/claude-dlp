@@ -185,6 +185,46 @@ printf '{"hook_event_name":"PreToolUse","tool_name":"Read","cwd":"%s","tool_inpu
 機密情報が検知されたら元の処理をブロックし、検知箇所を `********` に置換した安全なコピーを
 `mask_dir`（既定は `<repo>/.claude/hooks/dlp/masked/`）に生成して、そのパスを Claude に提示する。
 
+`PreToolUse` の判定経路は 2 段階に分かれる。①ルーティング（スコープ内か、キャッシュ済みマスク版がまだ新しいか）と、
+②スキャン（`dlp_scanner.py` が実際に何を判定するか）。`PostToolUse` は別系統の、間引き GC を行う
+best-effort な処理（後述の「stale 対策」「並行実行」を参照）であり、ここには含まれない。
+
+<details open>
+<summary>① ルーティング: スコープ判定と <code>mask_dir</code> の鮮度チェック（クリックで折りたたみ）</summary>
+
+```mermaid
+flowchart LR
+    A["Read / Grep 呼び出し"] --> B{"保護対象<br/>スコープ内か？"}
+    B -- いいえ --> ALLOW["allow<br/>（無言で exit 0）"]
+    B -- はい --> C{"既に mask_dir<br/>配下のパスか？"}
+    C -- いいえ --> SCAN["元ファイルを走査<br/>(→ 図②)"]
+    C -- はい --> D{"鮮度は最新か？<br/>(*.meta.json と<br/>mtime/size が一致)"}
+    D -- 最新 --> ALLOW
+    D -- "古い/未存在" --> SCAN2["再生成: 現在の<br/>元ファイルを走査 (→ 図②)"]
+```
+
+「保護対象スコープ内か」= `target_dirs` + `target_extensions`、または `always_target_globs`、から `exclude_globs` を除いたもの。
+
+</details>
+
+<details open>
+<summary>② スキャン: <code>dlp_scanner.py</code> による検知 → マスク生成（クリックで折りたたみ）</summary>
+
+```mermaid
+flowchart LR
+    F{"dlp_scanner.py で<br/>元ファイルを走査"} -- "障害/タイムアウト/<br/>設定不備" --> DENY["fail-closed: deny<br/>(on_scanner_error)"]
+    F -- "検知 0 件" --> ALLOW["allow<br/>（無言で exit 0）"]
+    F -- 検知あり --> G["マスク版を生成<br/>(検知箇所 → ********)"]
+    G --> H{"マスク版を<br/>再スキャン"}
+    H -- 検知が残る --> DENY
+    H -- クリーン --> REDIRECT["元ファイルの読み取りを deny;<br/>マスク版パスを提示"]
+```
+
+図①からの両方の分岐（まだマスクされていないパス、および元ファイルが変わって古くなったマスク版パス）は、
+ここでの「dlp_scanner.py で走査」のステップへ合流する。
+
+</details>
+
 ### 設定
 
 すべて `dlp.config.yaml` に書く。YAML そのものではなく、コメント・フラットな
