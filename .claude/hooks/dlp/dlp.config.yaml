@@ -1,0 +1,122 @@
+# Configuration for the dlp hook. See the "Configuration" section of README.md for details.
+#
+# This file is read by a self-contained minimal YAML parser (yaml_lite.py) so it
+# can be loaded with only the Python standard library. Only comments, flat
+# key: value pairs, and string arrays (both flow [a, b] and block - a forms)
+# are supported. Full YAML features such as anchors or nested maps are not.
+
+# Protected directories (multiple allowed). Relative paths are resolved from
+# the repo root, found starting at this file's location.
+#
+# The default "." (the whole repo) is meant for trying the hook out. When
+# adopting it into a real project, narrow this to the directories that
+# actually hold config files and secrets (e.g. src/main/resources, config/).
+# With ".", every .properties/.yml/.json/.xml/... file in the repo is scanned
+# on Read, and a Grep content search over a large repo easily exceeds
+# max_candidates, so the search is cut off and denied.
+target_dirs:
+  - .
+
+# Under target_dirs, only files with these extensions are scanned (case-insensitive).
+target_extensions:
+  - .properties
+  - .env
+  - .yml
+  - .yaml
+  - .json
+  - .ini
+  - .conf
+  - .cfg
+  - .toml
+  - .xml
+  - .config
+  - .pem
+  - .key
+  - .p12
+  - .jks
+
+# High-risk filename patterns that are always in scope regardless of
+# directory, even outside target_dirs (case-insensitive).
+always_target_globs:
+  - .env
+  - .env.*
+  - "*.pem"
+  - "*.key"
+  - id_rsa
+  - id_dsa
+  - id_ecdsa
+  - id_ed25519
+  - credentials
+  - .netrc
+  - .pgpass
+  - .npmrc
+  - "*.jks"
+  - "*.p12"
+  - "*.pfx"
+
+# Highest-priority exclusion patterns. An escape valve for when a false
+# positive blocks a file from being read and work stalls
+# (e.g. excluding WebGoat's i18n label files).
+exclude_globs: ["*/i18n/*", "*/node_modules/*", "*/.git/*"]
+
+# Values whose key name contains one of these words are treated as secrets.
+# Words of 4+ characters are matched by substring match with delimiters
+# stripped (api_key / api-key / apiKey all match). Short words of 3
+# characters or fewer (pw / pwd) are matched by exact word match after
+# splitting the key name into words (to avoid false positives).
+filter_words: [apikey, password, passwd, pwd, pw, secret]
+
+# Where masked files and the audit log are stored (created with mode 0700).
+# A relative path (including one that is still relative after ~ expansion)
+# is resolved from this file's location, i.e. <repo>/.claude/hooks/dlp/, so
+# each project gets its own independent storage. An absolute path is used as-is.
+mask_dir: masked
+
+# Behavior when scanning cannot be performed or verified.
+# deny (stop the read; default) / ask (confirm each time) / allow (pass through).
+on_scanner_error: deny
+
+# Seconds before a single run of the scanner (dlp_scanner.py) is cut off.
+scan_timeout_sec: 15
+
+# Files larger than this size (MB) are denied without scanning (so an
+# unscanned file is never mistaken for a safe one).
+max_target_mb: 10
+
+# Seconds since last access before a masked file's body is deleted by GC.
+body_ttl_sec: 600
+
+# Seconds since creation before a masked file's metadata (*.meta.json) is deleted by GC.
+meta_ttl_sec: 86400
+
+# Seconds to keep a cached "this file has no secrets" verdict (to skip re-scanning).
+cache_ttl_sec: 86400
+
+# Interval (seconds) at which garbage collection runs. Sweeps happening more
+# often than this interval are skipped.
+gc_interval_sec: 60
+
+# Seconds after which a GC lock held by another process may be considered
+# abandoned and taken over.
+gc_lock_stale_sec: 300
+
+# Upper bound on the number of candidate files collected while Grep walks a
+# directory. Exceeding it cuts the walk short and denies.
+max_candidates: 200
+
+# Upper bound on the total number of files examined while Grep walks a
+# directory. Exceeding it cuts the walk short and denies.
+max_walk_files: 20000
+
+# Overall time budget (seconds) for scanning within a single Read/Grep call.
+# Exceeding it denies.
+scan_budget_sec: 18
+
+# Minimum length for cleaning up a detected secret value that also appears
+# elsewhere in the file with no key-name clue. Values shorter than this are
+# left alone, since replacing them risks collateral damage to unrelated spans.
+min_scrub_len: 8
+
+# Size (bytes) at which the audit log (audit.log) is rotated. Secrets
+# themselves are never recorded in it.
+audit_max_bytes: 1000000
