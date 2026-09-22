@@ -189,6 +189,46 @@ When `Read` / `Grep` try to read a protected file, `dlp_scanner.py` scans it. If
 detected, the original operation is blocked and a safe copy — with detected spans replaced by `********` — is
 generated under `mask_dir` (default `<repo>/.claude/hooks/dlp/masked/`), and that path is presented to Claude.
 
+The `PreToolUse` decision path splits into two stages: routing (is this in scope, and is a cached
+masked copy still fresh?) and scanning (what `dlp_scanner.py` actually decides). `PostToolUse` runs a
+separate, best-effort GC pass (see "Staleness handling" and "Concurrency" below) not shown here.
+
+<details open>
+<summary>① Routing: scope check & <code>mask_dir</code> freshness (click to collapse)</summary>
+
+```mermaid
+flowchart LR
+    A["Read / Grep call"] --> B{"In protected<br/>scope?"}
+    B -- No --> ALLOW["Allow<br/>(silent exit 0)"]
+    B -- Yes --> C{"Already under<br/>mask_dir?"}
+    C -- No --> SCAN["Scan the original file<br/>(→ diagram ②)"]
+    C -- Yes --> D{"Fresh?<br/>(*.meta.json<br/>mtime/size match)"}
+    D -- Fresh --> ALLOW
+    D -- "Stale/missing" --> SCAN2["Regenerate: scan current<br/>original (→ diagram ②)"]
+```
+
+"In protected scope" = `target_dirs` + `target_extensions`, or `always_target_globs`, minus `exclude_globs`.
+
+</details>
+
+<details open>
+<summary>② Scanning: <code>dlp_scanner.py</code> detection → masking (click to collapse)</summary>
+
+```mermaid
+flowchart LR
+    F{"Run dlp_scanner.py<br/>on the original file"} -- "Error/timeout/<br/>bad config" --> DENY["Fail-closed: deny<br/>(on_scanner_error)"]
+    F -- "0 findings" --> ALLOW["Allow<br/>(silent exit 0)"]
+    F -- Findings --> G["Generate masked copy<br/>(spans → ********)"]
+    G --> H{"Rescan<br/>masked copy"}
+    H -- "Findings remain" --> DENY
+    H -- Clean --> REDIRECT["Deny original read;<br/>present masked copy path"]
+```
+
+Both branches from diagram ① (a not-yet-masked path, and a stale masked path whose original changed)
+feed into the "Run dlp_scanner.py" step here.
+
+</details>
+
 ### Configuration
 
 Everything is written in `dlp.config.yaml`. It is not read as full YAML; instead it's read by a self-contained

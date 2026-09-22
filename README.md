@@ -45,4 +45,17 @@ This repository applies its own `.claude/` to itself, so the hook is active whil
 ## .claude/hooks/dlp
 
 A hook that blocks `Read` / `Grep` when they try to read a file containing confidential information, and redirects
-to a masked copy instead. See [`.claude/hooks/dlp/README.md`](.claude/hooks/dlp/README.md) for details.
+to a masked copy instead.
+
+```mermaid
+flowchart LR
+    A["Claude Code:<br/>Read / Grep call"] --> B{"dlp hook:<br/>secrets found?"}
+    B -- No --> C["Allow:<br/>original file"]
+    B -- Yes --> D["Generate a masked copy<br/>(secrets replaced with ********)"]
+    D --> E["Deny the original read;<br/>redirect Claude to<br/>the masked copy file"]
+```
+
+(**Not shown above: if the scanner itself fails, times out, or the config is broken, the hook fails closed and
+denies the read by default — it does not fall back to allowing it.**) See
+[`.claude/hooks/dlp/README.md`](.claude/hooks/dlp/README.md) for the full decision flow (scope routing,
+staleness checks, fail-closed behavior) and configuration details.
