@@ -1,0 +1,15 @@
+# Sample Spring Boot YAML for trying the dlp hook. All values are fake.
+
+spring:
+  application:
+    name: sample-app
+  datasource:
+    url: jdbc:mysql://localhost:3306/sample
+    username: sample_user
+    password: "sample-yaml-password-NOT-REAL"   # quoted, with a trailing comment
+
+app:
+  api-key: 'sample-yaml-api-key-NOT-REAL'
+  replicas:
+    - host: replica1.example.com
+      passwd: sample-yaml-replica-passwd-NOT-REAL

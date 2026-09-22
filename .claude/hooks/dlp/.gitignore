@@ -1,0 +1,4 @@
+# Generated while the hook runs (not committed)
+__pycache__/
+tests/work/
+masked/
